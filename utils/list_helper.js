@@ -29,7 +29,7 @@ const mostBlogs = (blogs) => {
 
 const mostLikes = (blogs) => {
   try {
-    const ans = _(blogs)
+    return _(blogs)
       .groupBy('author')
       .map((object, author) => ({
         author,
@@ -37,7 +37,6 @@ const mostLikes = (blogs) => {
       }))
       .value()
       .reduce((prev, current) => ((prev && prev.likes >= current.likes) ? prev : current));
-    return ans;
   } catch (error) {
     return {};
   }
