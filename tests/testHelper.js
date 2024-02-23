@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Blog = require('../models/blogposts');
+const User = require('../models/users');
 
 const initialBlogs = [
   {
@@ -57,8 +58,16 @@ const blogsInDb = async () => {
   return blogs.map((blog) => blog.toJSON());
 };
 
+const usersInDb = async () => {
+  const users = await User.find({});
+  return users.map((u) => u.toJSON());
+};
+
 const nonExistingId = () => new mongoose.mongo.ObjectId();
 
 module.exports = {
-  initialBlogs, blogsInDb, nonExistingId,
+  initialBlogs,
+  blogsInDb,
+  nonExistingId,
+  usersInDb,
 };
