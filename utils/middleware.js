@@ -14,6 +14,20 @@ const unknownEndpoint = (request, response) => {
   response.status(404).send({ error: 'unknown endpoint' });
 };
 
+const tokenExtractor = async (request, response, next) => {
+  let authorization = request.get('Authorization');
+
+  if (authorization && authorization.startsWith('Bearer ')) {
+    authorization = authorization.replace('Bearer ', '');
+  }
+
+  const decodedToken = jwt.verify(authorization, process.env.SECRET);
+
+  if (!decodedToken.id) {
+    return response.status(401).json({ error: 'token invalid' });
+  }
+  next();
+};
 
 const userExtractor = async (request, response, next) => {
   let authorization = request.get('Authorization');
@@ -53,5 +67,6 @@ module.exports = {
   requestLogger,
   unknownEndpoint,
   userExtractor,
+  tokenExtractor,
   errorHandler,
 };
