@@ -1,30 +1,65 @@
 /* eslint-disable no-undef */
 const mongoose = require('mongoose');
 const supertest = require('supertest');
+const bcrypt = require('bcrypt');
+
 const helper = require('./testHelper');
 const app = require('../app');
 
 const api = supertest(app);
 const Blog = require('../models/blogposts');
+const User = require('../models/users');
 
 beforeEach(async () => {
   await Blog.deleteMany({});
+  await User.deleteMany({});
 
   const blogObjects = helper.initialBlogs
     .map((blog) => new Blog(blog));
   const promiseArray = blogObjects.map((blog) => blog.save());
   await Promise.all(promiseArray);
+
+  const passwordHash = await bcrypt.hash('hashybash', 10);
+  const user = new User({ username: 'root', passwordHash });
+  await user.save();
 });
 
 describe('get-requests', () => {
   test('returns correct number of blog posts', async () => {
-    const response = await api.get('/api/blogs');
+    const login = {
+      username: 'root',
+      password: 'hashybash',
+    };
+
+    const tokenResponse = await api
+      .post('/api/login')
+      .send(login);
+
+    const { token } = tokenResponse.body;
+
+    const response = await api
+      .get('/api/blogs')
+      .set('Authorization', `Bearer ${token}`);
 
     expect(response.body).toHaveLength(helper.initialBlogs.length);
   });
 
   test('a specific blog has the correct id', async () => {
-    const response = await api.get('/api/blogs');
+    const login = {
+      username: 'root',
+      password: 'hashybash',
+    };
+
+    const tokenResponse = await api
+      .post('/api/login')
+      .send(login);
+
+    const { token } = tokenResponse.body;
+
+    const response = await api
+      .get('/api/blogs')
+      .set('Authorization', `Bearer ${token}`);
+
     const contents = response.body;
 
     expect(contents[0]).toHaveProperty('id');
@@ -32,25 +67,56 @@ describe('get-requests', () => {
 });
 
 describe('post-requests', () => {
-  test('succeeds with code 201 with valid data', async () => {
+  test('succeeds with code 201 with valid data and valid login', async () => {
     const newBlog = {
       title: 'A Search Engine That Exists',
       author: 'G. Oogle',
       url: 'https://www.google.com/',
       likes: 0,
     };
+
+    const login = {
+      username: 'root',
+      password: 'hashybash',
+    };
+
+    const tokenResponse = await api
+      .post('/api/login')
+      .send(login);
+
+    const { token } = tokenResponse.body;
+
     await api
       .post('/api/blogs')
+      .set('Authorization', `Bearer ${token}`)
       .send(newBlog)
       .expect(201)
       .expect('Content-Type', /application\/json/);
 
-    const response = await api.get('/api/blogs');
+    const response = await api
+      .get('/api/blogs')
+      .set('Authorization', `Bearer ${token}`);
 
     const contents = response.body.map((r) => r.title);
 
     expect(response.body).toHaveLength(helper.initialBlogs.length + 1);
     expect(contents).toContain('A Search Engine That Exists');
+  });
+
+  test('fails with status code 401 without valid login token', async () => {
+    const newBlog = {
+      title: 'Another Search Engine',
+      author: 'G. Oogle',
+      url: 'https://www.google.com/',
+      likes: 0,
+    };
+
+    await api
+      .post('/api/blogs')
+      .set('Authorization', 'Bearer clearlyinvalidtoken')
+      .send(newBlog)
+      .expect(401)
+      .expect('Content-Type', /application\/json/);
   });
 
   test('adding a blog without likes-field sets likes to 0', async () => {
@@ -60,13 +126,28 @@ describe('post-requests', () => {
       url: 'https://www.medium.com/settinglikesto0/',
     };
 
+    const login = {
+      username: 'root',
+      password: 'hashybash',
+    };
+
+    const tokenResponse = await api
+      .post('/api/login')
+      .send(login);
+
+    const { token } = tokenResponse.body;
+
     await api
       .post('/api/blogs')
+      .set('Authorization', `Bearer ${token}`)
       .send(newBlog)
       .expect(201)
       .expect('Content-Type', /application\/json/);
 
-    const response = await api.get('/api/blogs');
+    const response = await api
+      .get('/api/blogs')
+      .set('Authorization', `Bearer ${token}`);
+
     const contents = response.body.map((r) => r.likes).at(-1);
 
     expect(contents).toEqual(0);
@@ -82,13 +163,26 @@ describe('post-requests', () => {
       url: 'https://abadrequest.meta/',
     };
 
+    const login = {
+      username: 'root',
+      password: 'hashybash',
+    };
+
+    const tokenResponse = await api
+      .post('/api/login')
+      .send(login);
+
+    const { token } = tokenResponse.body;
+
     await api
       .post('/api/blogs')
+      .set('Authorization', `Bearer ${token}`)
       .send(badBlog1)
       .expect(400);
 
     await api
       .post('/api/blogs')
+      .set('Authorization', `Bearer ${token}`)
       .send(badBlog2)
       .expect(400);
 
@@ -103,8 +197,20 @@ describe('delete-requests', () => {
     const blogsAtStart = await helper.blogsInDb();
     const blogToDelete = blogsAtStart[0];
 
+    const login = {
+      username: 'root',
+      password: 'hashybash',
+    };
+
+    const tokenResponse = await api
+      .post('/api/login')
+      .send(login);
+
+    const { token } = tokenResponse.body;
+
     await api
       .delete(`/api/blogs/${blogToDelete.id}`)
+      .set('Authorization', `Bearer ${token}`)
       .expect(204);
 
     const blogsAtEnd = await helper.blogsInDb();
@@ -119,8 +225,20 @@ describe('delete-requests', () => {
   test('fails with status code 404 with non-existing but valid id', async () => {
     const id = helper.nonExistingId();
 
+    const login = {
+      username: 'root',
+      password: 'hashybash',
+    };
+
+    const tokenResponse = await api
+      .post('/api/login')
+      .send(login);
+
+    const { token } = tokenResponse.body;
+
     await api
       .get(`/api/blogs/${id}`)
+      .set('Authorization', `Bearer ${token}`)
       .expect(404);
 
     const blogsAtEnd = await helper.blogsInDb();
@@ -131,8 +249,20 @@ describe('delete-requests', () => {
   test('fails with status code 404 with invalid id', async () => {
     const id = 'invalid_id';
 
+    const login = {
+      username: 'root',
+      password: 'hashybash',
+    };
+
+    const tokenResponse = await api
+      .post('/api/login')
+      .send(login);
+
+    const { token } = tokenResponse.body;
+
     await api
       .get(`/api/blogs/${id}`)
+      .set('Authorization', `Bearer ${token}`)
       .expect(404);
 
     const blogsAtEnd = await helper.blogsInDb();
@@ -145,6 +275,17 @@ describe('put-requests', () => {
   test('succeeds with valid data', async () => {
     const blogsAtStart = await helper.blogsInDb();
 
+    const login = {
+      username: 'root',
+      password: 'hashybash',
+    };
+
+    const tokenResponse = await api
+      .post('/api/login')
+      .send(login);
+
+    const { token } = tokenResponse.body;
+
     const blogToUpdate = {
       id: blogsAtStart[0].id,
       title: blogsAtStart[0].title,
@@ -155,6 +296,7 @@ describe('put-requests', () => {
 
     await api
       .put(`/api/blogs/${blogToUpdate.id}`)
+      .set('Authorization', `Bearer ${token}`)
       .send(blogToUpdate)
       .expect(201);
 
@@ -167,6 +309,17 @@ describe('put-requests', () => {
     const blogsAtStart = await helper.blogsInDb();
     const id = helper.nonExistingId();
 
+    const login = {
+      username: 'root',
+      password: 'hashybash',
+    };
+
+    const tokenResponse = await api
+      .post('/api/login')
+      .send(login);
+
+    const { token } = tokenResponse.body;
+
     const blogToUpdate = {
       id,
       title: blogsAtStart[0].title,
@@ -177,6 +330,7 @@ describe('put-requests', () => {
 
     await api
       .put(`/api/blogs/${id}`)
+      .set('Authorization', `Bearer ${token}`)
       .send(blogToUpdate)
       .expect(404);
 
@@ -189,6 +343,17 @@ describe('put-requests', () => {
     const blogsAtStart = await helper.blogsInDb();
     const id = 'invalid_id';
 
+    const login = {
+      username: 'root',
+      password: 'hashybash',
+    };
+
+    const tokenResponse = await api
+      .post('/api/login')
+      .send(login);
+
+    const { token } = tokenResponse.body;
+
     const blogToUpdate = {
       id,
       title: blogsAtStart[0].title,
@@ -199,6 +364,7 @@ describe('put-requests', () => {
 
     await api
       .put(`/api/blogs/${id}`)
+      .set('Authorization', `Bearer ${token}`)
       .send(blogToUpdate)
       .expect(400);
 

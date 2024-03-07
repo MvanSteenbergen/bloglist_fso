@@ -1,6 +1,10 @@
 const mongoose = require('mongoose');
+const supertest = require('supertest');
+
 const Blog = require('../models/blogposts');
 const User = require('../models/users');
+const app = require('../app');
+const api = supertest(app);
 
 const initialBlogs = [
   {
@@ -63,11 +67,25 @@ const usersInDb = async () => {
   return users.map((u) => u.toJSON());
 };
 
+const loginToken = async () => {
+  const login = {
+    username: 'root',
+    password: 'hashybash',
+  };
+
+  const tokenResponse = await api
+    .post('/api/login')
+    .send(login);
+
+  return tokenResponse.body;
+};
+
 const nonExistingId = () => new mongoose.mongo.ObjectId();
 
 module.exports = {
   initialBlogs,
   blogsInDb,
   nonExistingId,
+  loginToken,
   usersInDb,
 };
